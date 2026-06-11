@@ -10,6 +10,7 @@ import {
 import { createSupabaseBrowserClient } from "./client";
 
 type DbRow = Record<string, unknown>;
+type RankedParticipant = Participant & { rankingPosition: number };
 
 export type PorraData = {
   participants: Participant[];
@@ -86,7 +87,7 @@ export async function fetchPorraData(): Promise<PorraData> {
   const scorersById = indexById(scorerRows);
   const rankingByParticipantId = indexByParticipantId(rankingRows);
 
-  const participants = participantRows
+  const participants: RankedParticipant[] = participantRows
     .map((row, index) => {
       const id = getId(row);
       const ranking = rankingByParticipantId.get(id);
@@ -99,11 +100,12 @@ export async function fetchPorraData(): Promise<PorraData> {
         color: getString(row, ["color", "hex_color"], DEFAULT_COLORS[index % DEFAULT_COLORS.length]),
         totalPoints: getNumber(ranking, ["total_points", "totalPoints", "points", "total"], 0),
         todayPoints: getNumber(ranking, ["today_points", "todayPoints", "daily_points", "dailyPoints"], 0),
+        rankingPosition: getNumber(ranking, ["position", "rank", "ranking_position", "rankingPosition"], index + 1),
         teams: buildTeams(id, participantTeamRows, teamsById),
         scorers: buildScorers(id, participantScorerRows, scorersById),
       };
     })
-    .sort((a, b) => b.totalPoints - a.totalPoints || a.name.localeCompare(b.name));
+    .sort((a, b) => a.rankingPosition - b.rankingPosition);
 
   return {
     participants,
