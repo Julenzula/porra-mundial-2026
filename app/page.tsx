@@ -1,18 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  ACTIVITY_DATA,
-  BIGGEST_RISER,
-  EVOLUTION_DATA,
   FIFA_COLORS,
-  PARTICIPANTS,
-  RECENT_ACTIVITY,
-  TOP_SCORER,
-  TOP_TEAM,
   type ActivityDay,
+  type EvolutionPoint,
   type Participant,
 } from "./data";
+import { fetchPorraData, type PorraData } from "./supabase/porra-data";
 
 type TabId = "ranking" | "actividad" | "evolucion" | "participantes" | "compartir";
 
@@ -46,12 +41,44 @@ const EVENT_CONFIG = {
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabId>("ranking");
-  const sorted = useMemo(
-    () => [...PARTICIPANTS].sort((a, b) => b.totalPoints - a.totalPoints),
-    [],
-  );
+  const [data, setData] = useState<PorraData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const message = useMemo(() => buildShareMessage(sorted), [sorted]);
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadData() {
+      try {
+        setLoading(true);
+        setError(null);
+        const porraData = await fetchPorraData();
+        if (!cancelled) setData(porraData);
+      } catch (caughtError) {
+        if (!cancelled) {
+          setError(caughtError instanceof Error ? caughtError.message : "No se han podido cargar los datos.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const sorted = useMemo(() => data?.participants ?? [], [data]);
+
+  const message = useMemo(
+    () =>
+      data
+        ? buildShareMessage(sorted, data.biggestRiser, data.topScorer, data.topTeam)
+        : "",
+    [data, sorted],
+  );
 
   const shareToWhatsApp = () => {
     window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank");
@@ -63,15 +90,47 @@ export default function Home() {
         <Hero onShare={shareToWhatsApp} />
         <TabNav activeTab={activeTab} onChange={setActiveTab} />
 
-        {activeTab === "ranking" && <Ranking participants={sorted} />}
-        {activeTab === "actividad" && <Activity />}
-        {activeTab === "evolucion" && <Evolution participants={sorted} />}
-        {activeTab === "participantes" && <Participants participants={sorted} />}
-        {activeTab === "compartir" && <WhatsAppShare message={message} onShare={shareToWhatsApp} />}
+        {loading && <LoadingState />}
+        {error && !loading && <ErrorState message={error} />}
+        {data && !loading && !error && (
+          <>
+            {activeTab === "ranking" && <Ranking participants={sorted} />}
+            {activeTab === "actividad" && (
+              <Activity participants={sorted} activityByParticipant={data.activityByParticipant} />
+            )}
+            {activeTab === "evolucion" && (
+              <Evolution participants={sorted} evolutionData={data.evolutionData} />
+            )}
+            {activeTab === "participantes" && <Participants participants={sorted} />}
+            {activeTab === "compartir" && <WhatsAppShare message={message} onShare={shareToWhatsApp} />}
+          </>
+        )}
 
         <div className="h-8" />
       </div>
     </main>
+  );
+}
+
+function LoadingState() {
+  return (
+    <section className="bg-white px-4 py-10">
+      <div className="rounded-2xl border border-black/10 bg-neutral-50 px-4 py-8 text-center">
+        <p className="font-display text-xl font-black uppercase tracking-normal text-neutral-900">Cargando porra</p>
+        <p className="mt-2 text-sm text-neutral-500">Leyendo datos de Supabase...</p>
+      </div>
+    </section>
+  );
+}
+
+function ErrorState({ message }: { message: string }) {
+  return (
+    <section className="bg-white px-4 py-10">
+      <div className="rounded-2xl border border-[#E8002D]/25 bg-red-50 px-4 py-8 text-center">
+        <p className="font-display text-xl font-black uppercase tracking-normal text-[#E8002D]">Error cargando datos</p>
+        <p className="mt-2 text-sm text-red-900/70">{message}</p>
+      </div>
+    </section>
   );
 }
 
@@ -242,17 +301,28 @@ function Ranking({ participants }: { participants: Participant[] }) {
   );
 }
 
-function Activity() {
-  const [selectedId, setSelectedId] = useState(PARTICIPANTS[0].id);
-  const selected = PARTICIPANTS.find((p) => p.id === selectedId) ?? PARTICIPANTS[0];
-  const days = ACTIVITY_DATA[selected.id] ?? RECENT_ACTIVITY.find((item) => item.participant.id === selected.id)?.days ?? [];
+function Activity({
+  participants,
+  activityByParticipant,
+}: {
+  participants: Participant[];
+  activityByParticipant: Record<string, ActivityDay[]>;
+}) {
+  const [selectedId, setSelectedId] = useState(participants[0]?.id ?? "");
+  const effectiveSelectedId = participants.some((participant) => participant.id === selectedId)
+    ? selectedId
+    : participants[0]?.id ?? "";
+  const selected = participants.find((p) => p.id === effectiveSelectedId) ?? participants[0];
+  const days = selected ? activityByParticipant[selected.id] ?? [] : [];
+
+  if (!selected) return null;
 
   return (
     <section className="bg-white">
-      <SectionTitle label="Actividad · Ultimos movimientos" aside="Mock" />
+      <SectionTitle label="Actividad · Ultimos movimientos" aside="Supabase" />
       <div className="flex gap-2 overflow-x-auto px-4 pb-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {PARTICIPANTS.map((participant) => {
-          const active = participant.id === selectedId;
+        {participants.map((participant) => {
+          const active = participant.id === effectiveSelectedId;
           return (
             <button
               key={participant.id}
@@ -322,8 +392,14 @@ function DayCard({ day, isToday }: { day: ActivityDay; isToday: boolean }) {
   );
 }
 
-function Evolution({ participants }: { participants: Participant[] }) {
-  const max = 60;
+function Evolution({
+  participants,
+  evolutionData,
+}: {
+  participants: Participant[];
+  evolutionData: EvolutionPoint[];
+}) {
+  const max = Math.max(60, ...participants.map((participant) => participant.totalPoints));
   const width = 360;
   const height = 220;
   const padding = { top: 16, right: 14, bottom: 28, left: 28 };
@@ -331,9 +407,10 @@ function Evolution({ participants }: { participants: Participant[] }) {
   const chartHeight = height - padding.top - padding.bottom;
 
   const pointsFor = (name: string) =>
-    EVOLUTION_DATA.map((point, index) => {
-      const x = padding.left + (index / (EVOLUTION_DATA.length - 1)) * chartWidth;
-      const y = padding.top + chartHeight - (point.scores[name] / max) * chartHeight;
+    evolutionData.map((point, index) => {
+      const divisor = Math.max(evolutionData.length - 1, 1);
+      const x = padding.left + (index / divisor) * chartWidth;
+      const y = padding.top + chartHeight - ((point.scores[name] ?? 0) / max) * chartHeight;
       return `${x},${y}`;
     }).join(" ");
 
@@ -363,8 +440,9 @@ function Evolution({ participants }: { participants: Participant[] }) {
                   </g>
                 );
               })}
-              {EVOLUTION_DATA.map((point, index) => {
-                const x = padding.left + (index / (EVOLUTION_DATA.length - 1)) * chartWidth;
+              {evolutionData.map((point, index) => {
+                const divisor = Math.max(evolutionData.length - 1, 1);
+                const x = padding.left + (index / divisor) * chartWidth;
                 return (
                   <text key={point.date} x={x} y={height - 8} textAnchor="middle" className="fill-neutral-400 text-[9px]">
                     {point.date.replace(" ", "\n")}
@@ -383,9 +461,10 @@ function Evolution({ participants }: { participants: Participant[] }) {
                 />
               ))}
               {participants.slice(0, 4).flatMap((participant, participantIndex) =>
-                EVOLUTION_DATA.map((point, index) => {
-                  const x = padding.left + (index / (EVOLUTION_DATA.length - 1)) * chartWidth;
-                  const y = padding.top + chartHeight - (point.scores[participant.name] / max) * chartHeight;
+                evolutionData.map((point, index) => {
+                  const divisor = Math.max(evolutionData.length - 1, 1);
+                  const x = padding.left + (index / divisor) * chartWidth;
+                  const y = padding.top + chartHeight - ((point.scores[participant.name] ?? 0) / max) * chartHeight;
                   return <circle key={`${participant.id}-${point.date}`} cx={x} cy={y} r={2.4} fill={RANK_COLORS[participantIndex]} />;
                 }),
               )}
@@ -572,7 +651,12 @@ function Points({ points }: { points: number }) {
   );
 }
 
-function buildShareMessage(sorted: Participant[]) {
+function buildShareMessage(
+  sorted: Participant[],
+  biggestRiser: { name: string; points: number },
+  topScorer: { name: string; flag: string; goals: number },
+  topTeam: { name: string; flag: string; points: number },
+) {
   const medals = ["🥇", "🥈", "🥉", "4.", "5.", "6.", "7.", "8."];
   return [
     "🏆 *PORRA MUNDIAL 2026*",
@@ -585,9 +669,9 @@ function buildShareMessage(sorted: Participant[]) {
         }`,
     ),
     "─────────────────",
-    `🔥 Mayor subida: *${BIGGEST_RISER.name}* +${BIGGEST_RISER.points}`,
-    `⚽ Top goleador: *${TOP_SCORER.name}* ${TOP_SCORER.flag} ${TOP_SCORER.goals} goles`,
-    `🌍 Top equipo: *${TOP_TEAM.flag} ${TOP_TEAM.name}* +${TOP_TEAM.points}`,
+    `🔥 Mayor subida: *${biggestRiser.name}* +${biggestRiser.points}`,
+    `⚽ Top goleador: *${topScorer.name}* ${topScorer.flag} ${topScorer.goals} goles`,
+    `🌍 Top equipo: *${topTeam.flag} ${topTeam.name}* +${topTeam.points}`,
     "",
     "💪 ¡Vamos que podemos!",
   ].join("\n");
