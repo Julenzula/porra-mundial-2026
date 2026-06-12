@@ -134,6 +134,46 @@ El mock vive en `app/data.ts` y contiene:
 - `TOP_TEAM`: equipo con mas puntos mock.
 - `BIGGEST_RISER`: mayor subida del dia mock.
 
+## Recalculo manual de puntuacion
+
+La app incluye un primer motor interno para recalcular la porra desde datos manuales guardados en Supabase. No conecta ninguna API externa de futbol y no requiere login.
+
+Endpoint:
+
+- `POST /api/recalculate`
+
+Proteccion:
+
+- En produccion debe configurarse `RECALCULATE_SECRET`.
+- La llamada debe enviar el secreto en el header `x-recalculate-secret`, en `Authorization: Bearer <secret>` o como query param `?secret=<secret>`.
+- Si `RECALCULATE_SECRET` no existe, solo se permite ejecutar en `development`.
+
+Tablas de entrada:
+
+- `matches`: partidos con `status = 'finished'` y resultado final.
+- `match_goals`: goles de esos partidos.
+- `participant_teams`: equipos elegidos por participante.
+- `participant_scorers`: goleadores elegidos por participante.
+- `participants`, `teams`, `scorers`: nombres, ids y metadatos para calcular y describir eventos.
+
+Tablas regeneradas o actualizadas:
+
+- `daily_activity`: eventos entendibles por participante y fecha.
+- `current_ranking`: total recalculado, puntos de la ultima fecha con actividad, posicion nueva y posicion anterior.
+- `ranking_snapshots`: historico por fecha afectada.
+
+Reglas actuales:
+
+- Victoria de equipo elegido: `+3`.
+- Empate de equipo elegido: `+1`.
+- Derrota: `+0`.
+- Cada gol marcado por equipo elegido: `+1`.
+- Goleador G1: `+1` por gol.
+- Goleador G2: `+2` por gol.
+- Goleador G3: `+3` por gol.
+- Cuentan goles de penalti durante partido y goles en prorroga.
+- No cuentan goles de tanda de penaltis ni goles en propia puerta para goleadores.
+
 ## Proximos bloques de desarrollo
 
 ### 1. Definir reglas finales de puntuacion
