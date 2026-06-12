@@ -52,6 +52,7 @@ export function AdminClient({
   const [status, setStatus] = useState<"idle" | "loading" | "saving" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const savingRef = useRef(false);
 
   useEffect(() => {
     if (authenticated) textareaRef.current?.focus();
@@ -112,26 +113,36 @@ export function AdminClient({
   }
 
   async function confirm() {
+    if (savingRef.current) return;
+
+    savingRef.current = true;
     setStatus("saving");
     setMessage("");
 
-    const response = await fetch("/api/admin/import-result", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ input }),
-    });
-    const data = await response.json();
+    try {
+      const response = await fetch("/api/admin/import-result", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ input }),
+      });
+      const data = await response.json();
 
-    if (!response.ok || !data.ok) {
+      if (!response.ok || !data.ok) {
+        setStatus("error");
+        setMessage(data.error ?? "No se ha podido guardar el resultado.");
+        if (data.preview) setPreview(data.preview);
+        return;
+      }
+
+      setStatus("success");
+      setMessage("Resultado guardado y ranking recalculado.");
+      setPreview(data.preview);
+    } catch {
       setStatus("error");
-      setMessage(data.error ?? "No se ha podido guardar el resultado.");
-      if (data.preview) setPreview(data.preview);
-      return;
+      setMessage("No se ha podido guardar el resultado.");
+    } finally {
+      savingRef.current = false;
     }
-
-    setStatus("success");
-    setMessage("Resultado guardado y ranking recalculado.");
-    setPreview(data.preview);
   }
 
   return (
