@@ -17,7 +17,7 @@ type ParticipantScore = {
 
 type ActivityInsert = {
   participant_id: string;
-  date: string;
+  activity_date: string;
   type: string;
   flag: string;
   description: string;
@@ -26,7 +26,7 @@ type ActivityInsert = {
 
 type SnapshotInsert = {
   participant_id: string;
-  date: string;
+  snapshot_date: string;
   total_points: number;
   position: number;
 };
@@ -277,7 +277,7 @@ function addPoints({
 
   participant.totalPoints += points;
   participant.dailyPoints.set(date, (participant.dailyPoints.get(date) ?? 0) + points);
-  activityRows.push({ participant_id: participantId, date, type, flag, description, points });
+  activityRows.push({ participant_id: participantId, activity_date: date, type, flag, description, points });
 }
 
 function buildInitialScores(participants: DbRow[], rankingByParticipantId: Map<string, DbRow>) {
@@ -336,7 +336,7 @@ function buildSnapshotRows(participants: ParticipantScore[], dates: string[]): S
 
     return snapshotParticipants.map(({ participant, totalPoints }, index) => ({
       participant_id: participant.id,
-      date,
+      snapshot_date: date,
       total_points: totalPoints,
       position: index + 1,
     }));
@@ -356,7 +356,7 @@ async function regenerateActivity(
 ) {
   if (!dates.length) return;
 
-  const deleteResult = await supabase.from("daily_activity").delete().in("date", dates);
+  const deleteResult = await supabase.from("daily_activity").delete().in("activity_date", dates);
   if (deleteResult.error) throw new Error(deleteResult.error.message);
 
   if (rows.length) {
@@ -372,7 +372,7 @@ async function regenerateSnapshots(
 ) {
   if (!dates.length) return;
 
-  const deleteResult = await supabase.from("ranking_snapshots").delete().in("date", dates);
+  const deleteResult = await supabase.from("ranking_snapshots").delete().in("snapshot_date", dates);
   if (deleteResult.error) throw new Error(deleteResult.error.message);
 
   if (rows.length) {
@@ -430,7 +430,7 @@ function getScorerId(row: DbRow | undefined) {
 }
 
 function getMatchDate(row: DbRow) {
-  const value = getString(row, ["date", "match_date", "kickoff_at", "played_at"], "");
+  const value = getString(row, ["match_date", "date", "kickoff_at", "played_at"], "");
   if (!value) return "unknown";
   return value.slice(0, 10);
 }
