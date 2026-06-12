@@ -18,10 +18,12 @@ type ParticipantScore = {
 type ActivityInsert = {
   participant_id: string;
   activity_date: string;
-  type: string;
-  flag: string;
+  title: string;
   description: string;
   points: number;
+  activity_type: string;
+  source_team: string | null;
+  source_player: string | null;
 };
 
 type SnapshotInsert = {
@@ -207,8 +209,10 @@ function scoreMatch({
         activityRows,
         participantId,
         date: matchDate,
-        type: resultPoints === TEAM_WIN_POINTS ? "team_win" : "team_draw",
-        flag: getString(team, ["flag", "emoji"], "⚽"),
+        activityType: resultPoints === TEAM_WIN_POINTS ? "team_win" : "team_draw",
+        sourceTeam: teamId,
+        sourcePlayer: null,
+        title: `${getTeamName(team)} ${resultPoints === TEAM_WIN_POINTS ? "victoria" : "empate"}`,
         description: `${getTeamName(team)} ${resultPoints === TEAM_WIN_POINTS ? "victoria" : "empate"}`,
         points: resultPoints,
       });
@@ -220,8 +224,10 @@ function scoreMatch({
         activityRows,
         participantId,
         date: matchDate,
-        type: "team_goals",
-        flag: getString(team, ["flag", "emoji"], "⚽"),
+        activityType: "team_goals",
+        sourceTeam: teamId,
+        sourcePlayer: null,
+        title: `${getTeamName(team)} marca ${goalsPoints} ${goalsPoints === 1 ? "gol" : "goles"}`,
         description: `${getTeamName(team)} marca ${goalsPoints} ${goalsPoints === 1 ? "gol" : "goles"}`,
         points: goalsPoints,
       });
@@ -245,8 +251,10 @@ function scoreMatch({
       activityRows,
       participantId,
       date: matchDate,
-      type: "scorer",
-      flag: getString(scorer, ["flag", "emoji"], "⚽"),
+      activityType: "scorer",
+      sourceTeam: null,
+      sourcePlayer: scorerId,
+      title: `${getScorerName(scorer)} marca${goalsScored > 1 ? ` x${goalsScored}` : ""}`,
       description: `${getScorerName(scorer)} marca${goalsScored > 1 ? ` x${goalsScored}` : ""}`,
       points: goalsScored * weight,
     });
@@ -258,8 +266,10 @@ function addPoints({
   activityRows,
   participantId,
   date,
-  type,
-  flag,
+  activityType,
+  sourceTeam,
+  sourcePlayer,
+  title,
   description,
   points,
 }: {
@@ -267,8 +277,10 @@ function addPoints({
   activityRows: ActivityInsert[];
   participantId: string;
   date: string;
-  type: string;
-  flag: string;
+  activityType: string;
+  sourceTeam: string | null;
+  sourcePlayer: string | null;
+  title: string;
   description: string;
   points: number;
 }) {
@@ -277,7 +289,16 @@ function addPoints({
 
   participant.totalPoints += points;
   participant.dailyPoints.set(date, (participant.dailyPoints.get(date) ?? 0) + points);
-  activityRows.push({ participant_id: participantId, activity_date: date, type, flag, description, points });
+  activityRows.push({
+    participant_id: participantId,
+    activity_date: date,
+    title,
+    description,
+    points,
+    activity_type: activityType,
+    source_team: sourceTeam,
+    source_player: sourcePlayer,
+  });
 }
 
 function buildInitialScores(participants: DbRow[], rankingByParticipantId: Map<string, DbRow>) {

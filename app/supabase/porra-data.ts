@@ -109,7 +109,7 @@ export async function fetchPorraData(): Promise<PorraData> {
 
   return {
     participants,
-    activityByParticipant: buildActivity(activityRows, participants),
+    activityByParticipant: buildActivity(activityRows, participants, teamsById, scorersById),
     evolutionData: buildEvolution(snapshotRows, participants),
     biggestRiser: getBiggestRiser(participants),
     topScorer: getTopScorer(participants),
@@ -144,7 +144,12 @@ function buildScorers(participantId: string, relationRows: DbRow[], scorersById:
     });
 }
 
-function buildActivity(activityRows: DbRow[], participants: Participant[]): Record<string, ActivityDay[]> {
+function buildActivity(
+  activityRows: DbRow[],
+  participants: Participant[],
+  teamsById: Map<string, DbRow>,
+  scorersById: Map<string, DbRow>,
+): Record<string, ActivityDay[]> {
   const byParticipant: Record<string, ActivityDay[]> = {};
 
   for (const participant of participants) {
@@ -173,9 +178,9 @@ function buildActivity(activityRows: DbRow[], participants: Participant[]): Reco
       const date = formatDate(getString(row, ["date", "activity_date", "day", "created_at"], "Hoy"));
       const events = grouped.get(date) ?? [];
       events.push({
-        type: normalizeEventType(getString(row, ["type", "event_type"], "bonus")),
-        flag: getString(row, ["flag", "emoji"], "⚽"),
-        description: getString(row, ["description", "label", "event"], "Evento de puntuacion"),
+        type: normalizeEventType(getString(row, ["activity_type", "type", "event_type"], "bonus")),
+        flag: getActivityFlag(row, teamsById, scorersById),
+        description: getString(row, ["description", "title", "label", "event"], "Evento de puntuacion"),
         points: getNumber(row, ["points", "value"], 0),
       });
       grouped.set(date, events);
@@ -208,7 +213,7 @@ function buildEvolution(snapshotRows: DbRow[], participants: Participant[]): Evo
     const participantName = participantNameById.get(getParticipantId(row));
     if (!participantName) continue;
 
-    const date = formatDate(getString(row, ["date", "snapshot_date", "day", "created_at"], "Hoy"));
+    const date = formatDate(getString(row, ["snapshot_date", "date", "day", "created_at"], "Hoy"));
     const scores = grouped.get(date) ?? {};
     scores[participantName] = getNumber(row, ["total_points", "totalPoints", "points", "total"], 0);
     grouped.set(date, scores);
@@ -244,6 +249,16 @@ function getTopTeam(participants: Participant[]) {
     flag: team?.flag ?? "🏳️",
     points: team?.points ?? 0,
   };
+}
+
+function getActivityFlag(row: DbRow, teamsById: Map<string, DbRow>, scorersById: Map<string, DbRow>) {
+  const team = teamsById.get(getString(row, ["source_team", "team_id", "teamId"], ""));
+  if (team) return getString(team, ["flag", "emoji"], "⚽");
+
+  const scorer = scorersById.get(getString(row, ["source_player", "source_scorer", "scorer_id", "scorerId"], ""));
+  if (scorer) return getString(scorer, ["flag", "emoji"], "⚽");
+
+  return "⚽";
 }
 
 function asRows(data: unknown): DbRow[] {
