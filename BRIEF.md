@@ -147,6 +147,9 @@ Proteccion:
 - En produccion debe configurarse `RECALCULATE_SECRET`.
 - La llamada debe enviar el secreto en el header `x-recalculate-secret`, en `Authorization: Bearer <secret>` o como query param `?secret=<secret>`.
 - Si `RECALCULATE_SECRET` no existe, solo se permite ejecutar en `development`.
+- El endpoint escribe en tablas con RLS usando un cliente server-side con `SUPABASE_SERVICE_ROLE_KEY`.
+- `SUPABASE_SERVICE_ROLE_KEY` es obligatoria en local y produccion para ejecutar el recalculo, y no debe llevar prefijo `NEXT_PUBLIC`.
+- Si falta `SUPABASE_SERVICE_ROLE_KEY`, el endpoint devuelve el error `Missing SUPABASE_SERVICE_ROLE_KEY`.
 
 Tablas de entrada:
 

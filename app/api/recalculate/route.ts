@@ -107,7 +107,7 @@ async function recalculatePorra() {
   const finishedMatches = asRows(matchesResult.data);
 
   const finishedMatchIds = finishedMatches.map(getId).filter(Boolean);
-  const matchGoals = finishedMatchIds.length ? await fetchMatchGoals(finishedMatchIds) : [];
+  const matchGoals = finishedMatchIds.length ? await fetchMatchGoals(supabase, finishedMatchIds) : [];
   const affectedDates = unique(finishedMatches.map(getMatchDate).filter(Boolean));
 
   const teamsById = indexById(teams);
@@ -154,8 +154,10 @@ async function recalculatePorra() {
   };
 }
 
-async function fetchMatchGoals(matchIds: string[]) {
-  const supabase = createSupabaseServerClient();
+async function fetchMatchGoals(
+  supabase: ReturnType<typeof createSupabaseServerClient>,
+  matchIds: string[],
+) {
   const result = await supabase.from("match_goals").select("*").in("match_id", matchIds);
   if (result.error) throw new Error(result.error.message);
   return asRows(result.data);
