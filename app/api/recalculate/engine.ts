@@ -454,12 +454,7 @@ function getScorerWeight(row: DbRow, allScorerPicks: DbRow[]) {
 }
 
 function isPenaltyShootoutGoal(row: DbRow) {
-  const period = getString(row, ["period", "goal_period", "phase"], "").toLowerCase();
-  return (
-    getBoolean(row, ["is_penalty_shootout", "penalty_shootout", "isShootout"]) ||
-    period.includes("shootout") ||
-    period.includes("tanda")
-  );
+  return getBoolean(row, ["is_penalty_shootout", "penalty_shootout", "isShootout"]);
 }
 
 function isOwnGoal(row: DbRow) {

@@ -8,6 +8,9 @@ export type ParsedGoal = {
   teamId: string | null;
   scorerId: string | null;
   scorerMatched: boolean;
+  isPenalty: boolean;
+  isExtraTime: boolean;
+  isPenaltyShootout: boolean;
 };
 
 export type ParsedMatchPreview = {
@@ -90,8 +93,23 @@ export function parseAdminResult(raw: string, teams: DbRow[], scorers: DbRow[]):
         continue;
       }
 
-      const minuteMatch = goalText.match(/\s+(\d{1,3}(?:\+\d{1,2})?)['’′]?\s*$/);
-      const playerName = goalText.replace(/\s+\d{1,3}(?:\+\d{1,2})?['’′]?\s*$/, "").trim();
+      const isPenaltyShootout = /tanda|penaltis?|shootout/i.test(goalText);
+      const isPenalty =
+        (/\((?:p|penalti|penalty)\)/i.test(goalText) || /\bpen(?:alti|alty)\b/i.test(goalText)) && !isPenaltyShootout;
+      const isExtraTime = /pr[oó]rroga|extra\s*time|\bET\b/i.test(goalText);
+      const goalWithoutTags = goalText
+        .replace(/\((?:p|penalti|penalty|pr[oó]rroga|extra time|et|tanda|penaltis?|shootout)\)/gi, "")
+        .replace(/\b(?:penalti|penalty|pr[oó]rroga|extra time|tanda|penaltis?|shootout)\b/gi, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      const minuteMatch = goalWithoutTags.match(/\s+(\d{1,3}(?:\+\d{1,2})?)['’′]?\s*$/);
+      const playerName = goalWithoutTags.replace(/\s+\d{1,3}(?:\+\d{1,2})?['’′]?\s*$/, "").trim();
+      if (isPenaltyShootout) {
+        issues.push({
+          level: "info",
+          message: `${playerName || goalText} parece de tanda de penaltis. Se guardara marcado como tanda y no puntuara.`,
+        });
+      }
       const scorer = findByName(scorers, playerName);
       if (!scorer) {
         issues.push({
@@ -108,6 +126,9 @@ export function parseAdminResult(raw: string, teams: DbRow[], scorers: DbRow[]):
         teamId: currentSide === "home" ? getId(homeTeamRow) : getId(awayTeamRow),
         scorerId: scorer ? getId(scorer) : null,
         scorerMatched: Boolean(scorer),
+        isPenalty,
+        isExtraTime,
+        isPenaltyShootout,
       });
     }
   } else if (homeGoals + awayGoals > 0) {

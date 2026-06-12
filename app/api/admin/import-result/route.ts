@@ -45,12 +45,13 @@ export async function POST(request: NextRequest) {
     const goalRows = preview.goals.map((goal) => ({
       match_id: matchId,
       team_id: goal.teamId,
-      scorer_id: goal.scorerId,
+      scorer_id: goal.isPenaltyShootout ? null : goal.scorerId,
       player_name: goal.playerName,
       minute: goal.minute,
-      period: "regular",
-      is_penalty_shootout: false,
       is_own_goal: false,
+      is_penalty: goal.isPenalty,
+      is_extra_time: goal.isExtraTime,
+      is_penalty_shootout: goal.isPenaltyShootout,
     }));
 
     if (goalRows.length) {
